@@ -1,0 +1,32 @@
+[
+    {
+        "ticker": "TLKM",
+        "period": "2025",
+        "operatingCashFlow": 63842000000000,
+        "capitalExpenditure": 25768000000000,
+        "freeCashFlow": 38074000000000,
+        "status": "AVAILABLE",
+        "source": "OFFICIAL_REPORT",
+        "sourceType": "FINANCIAL_STATEMENT"
+    },
+    {
+        "ticker": "ASII",
+        "period": "2025",
+        "operatingCashFlow": 44694000000000,
+        "capitalExpenditure": 16487000000000,
+        "freeCashFlow": 28207000000000,
+        "status": "AVAILABLE",
+        "source": "OFFICIAL_REPORT",
+        "sourceType": "FINANCIAL_STATEMENT"
+    },
+    {
+        "ticker": "UNVR",
+        "period": "2025",
+        "operatingCashFlow": 5797496000000,
+        "capitalExpenditure": 862296000000,
+        "freeCashFlow": 4935200000000,
+        "status": "AVAILABLE",
+        "source": "OFFICIAL_REPORT",
+        "sourceType": "FINANCIAL_STATEMENT"
+    }
+]
