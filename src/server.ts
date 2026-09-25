@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 
 import {
     getExecutionLogs,
@@ -26,10 +27,43 @@ import {
     startScheduler,
 } from "./services/scheduler.js";
 
+
 const app = express();
+
 const PORT = 3000;
 
+
+/* =========================================================
+   BASIC CONFIGURATION
+   ========================================================= */
+
 app.use(express.json());
+
+
+/* =========================================================
+   STATIC FRONTEND / LOG VIEWER
+   ========================================================= */
+
+app.use(
+    express.static(
+        path.join(process.cwd(), "public")
+    )
+);
+
+app.get("/logs", (_req, res) => {
+    res.sendFile(
+        path.join(
+            process.cwd(),
+            "public",
+            "logs.html"
+        )
+    );
+});
+
+
+/* =========================================================
+   HEALTH CHECK
+   ========================================================= */
 
 app.get("/api/health", (_req, res) => {
     res.json({
@@ -38,22 +72,32 @@ app.get("/api/health", (_req, res) => {
     });
 });
 
+
+/* =========================================================
+   ANALYSIS
+   ========================================================= */
+
 /**
  * Menjalankan analisis AVEZ secara langsung.
  */
+
 app.post(
     "/api/analysis/run",
     async (req, res) => {
+
         try {
+
             const {
                 tickers,
                 budget,
             } = req.body;
 
+
             if (
                 !Array.isArray(tickers) ||
                 tickers.length === 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -63,11 +107,13 @@ app.post(
                 return;
             }
 
+
             if (
                 typeof budget !== "number" ||
                 !Number.isFinite(budget) ||
                 budget <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -77,6 +123,7 @@ app.post(
                 return;
             }
 
+
             const result =
                 await runDataEngineWithLogging({
                     tickers,
@@ -84,17 +131,21 @@ app.post(
                     triggerType: "API",
                 });
 
+
             res.json({
                 success: true,
                 message:
                     "Analisis AVEZ berhasil dijalankan",
                 data: result,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal menjalankan analisis AVEZ:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
@@ -103,17 +154,27 @@ app.post(
                         ? error.message
                         : "Gagal menjalankan analisis AVEZ",
             });
+
         }
+
     }
 );
+
+
+/* =========================================================
+   SCHEDULES
+   ========================================================= */
 
 /**
  * Membuat schedule baru.
  */
+
 app.post(
     "/api/schedules",
     async (req, res) => {
+
         try {
+
             const {
                 name,
                 tickers,
@@ -123,18 +184,20 @@ app.post(
                 nextRunAt,
             } = req.body;
 
-            const validScheduleTypes: ScheduleType[] =
-                [
-                    "ONCE",
-                    "DAILY",
-                    "WEEKLY",
-                ];
+
+            const validScheduleTypes: ScheduleType[] = [
+                "ONCE",
+                "DAILY",
+                "WEEKLY",
+            ];
+
 
             if (
                 !validScheduleTypes.includes(
                     scheduleType
                 )
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -143,6 +206,7 @@ app.post(
 
                 return;
             }
+
 
             const schedule =
                 await createSchedule({
@@ -154,10 +218,11 @@ app.post(
                     nextRunAt:
                         nextRunAt
                             ? new Date(
-                                  nextRunAt
-                              )
+                                nextRunAt
+                            )
                             : null,
                 });
+
 
             res.status(201).json({
                 success: true,
@@ -165,11 +230,14 @@ app.post(
                     "Schedule berhasil dibuat",
                 data: schedule,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal membuat schedule:",
                 error
             );
+
 
             res.status(400).json({
                 success: false,
@@ -178,9 +246,12 @@ app.post(
                         ? error.message
                         : "Gagal membuat schedule",
             });
+
         }
+
     }
 );
+
 
 /**
  * Mengambil semua schedule.
@@ -188,51 +259,67 @@ app.post(
  * ?active=true
  * hanya mengambil schedule aktif.
  */
+
 app.get(
     "/api/schedules",
     async (req, res) => {
+
         try {
+
             const activeOnly =
                 req.query.active === "true";
+
 
             const schedules =
                 await getSchedules(
                     activeOnly
                 );
 
+
             res.json({
                 success: true,
                 data: schedules,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal mengambil schedules:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal mengambil schedules",
             });
+
         }
+
     }
 );
+
 
 /**
  * Mengambil schedule berdasarkan ID.
  */
+
 app.get(
     "/api/schedules/:id",
     async (req, res) => {
+
         try {
+
             const id =
                 Number(req.params.id);
+
 
             if (
                 !Number.isInteger(id) ||
                 id <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -242,10 +329,13 @@ app.get(
                 return;
             }
 
+
             const schedule =
                 await getScheduleById(id);
 
+
             if (!schedule) {
+
                 res.status(404).json({
                     success: false,
                     message:
@@ -255,39 +345,51 @@ app.get(
                 return;
             }
 
+
             res.json({
                 success: true,
                 data: schedule,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal mengambil schedule:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal mengambil schedule",
             });
+
         }
+
     }
 );
+
 
 /**
  * Mengubah schedule.
  */
+
 app.put(
     "/api/schedules/:id",
     async (req, res) => {
+
         try {
+
             const id =
                 Number(req.params.id);
+
 
             if (
                 !Number.isInteger(id) ||
                 id <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -296,6 +398,7 @@ app.put(
 
                 return;
             }
+
 
             const {
                 name,
@@ -307,12 +410,13 @@ app.put(
                 nextRunAt,
             } = req.body;
 
-            const validScheduleTypes: ScheduleType[] =
-                [
-                    "ONCE",
-                    "DAILY",
-                    "WEEKLY",
-                ];
+
+            const validScheduleTypes: ScheduleType[] = [
+                "ONCE",
+                "DAILY",
+                "WEEKLY",
+            ];
+
 
             if (
                 scheduleType !== undefined &&
@@ -320,6 +424,7 @@ app.put(
                     scheduleType
                 )
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -328,6 +433,7 @@ app.put(
 
                 return;
             }
+
 
             const schedule =
                 await updateSchedule(
@@ -340,19 +446,19 @@ app.put(
                         scheduleValue,
                         isActive,
                         nextRunAt:
-                            nextRunAt ===
-                            undefined
+                            nextRunAt === undefined
                                 ? undefined
-                                : nextRunAt ===
-                                  null
-                                ? null
-                                : new Date(
-                                      nextRunAt
-                                  ),
+                                : nextRunAt === null
+                                    ? null
+                                    : new Date(
+                                        nextRunAt
+                                    ),
                     }
                 );
 
+
             if (!schedule) {
+
                 res.status(404).json({
                     success: false,
                     message:
@@ -362,17 +468,21 @@ app.put(
                 return;
             }
 
+
             res.json({
                 success: true,
                 message:
                     "Schedule berhasil diperbarui",
                 data: schedule,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal memperbarui schedule:",
                 error
             );
+
 
             res.status(400).json({
                 success: false,
@@ -381,24 +491,32 @@ app.put(
                         ? error.message
                         : "Gagal memperbarui schedule",
             });
+
         }
+
     }
 );
+
 
 /**
  * Mengaktifkan / menonaktifkan schedule.
  */
+
 app.patch(
     "/api/schedules/:id/status",
     async (req, res) => {
+
         try {
+
             const id =
                 Number(req.params.id);
+
 
             if (
                 !Number.isInteger(id) ||
                 id <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -408,14 +526,17 @@ app.patch(
                 return;
             }
 
+
             const {
                 isActive,
             } = req.body;
+
 
             if (
                 typeof isActive !==
                 "boolean"
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -425,13 +546,16 @@ app.patch(
                 return;
             }
 
+
             const schedule =
                 await setScheduleActive(
                     id,
                     isActive
                 );
 
+
             if (!schedule) {
+
                 res.status(404).json({
                     success: false,
                     message:
@@ -441,6 +565,7 @@ app.patch(
                 return;
             }
 
+
             res.json({
                 success: true,
                 message: isActive
@@ -448,35 +573,46 @@ app.patch(
                     : "Schedule dinonaktifkan",
                 data: schedule,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal mengubah status schedule:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal mengubah status schedule",
             });
+
         }
+
     }
 );
+
 
 /**
  * Menghapus schedule.
  */
+
 app.delete(
     "/api/schedules/:id",
     async (req, res) => {
+
         try {
+
             const id =
                 Number(req.params.id);
+
 
             if (
                 !Number.isInteger(id) ||
                 id <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -486,10 +622,13 @@ app.delete(
                 return;
             }
 
+
             const deleted =
                 await deleteSchedule(id);
 
+
             if (!deleted) {
+
                 res.status(404).json({
                     success: false,
                     message:
@@ -499,89 +638,117 @@ app.delete(
                 return;
             }
 
+
             res.json({
                 success: true,
                 message:
                     "Schedule berhasil dihapus",
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal menghapus schedule:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal menghapus schedule",
             });
+
         }
+
     }
 );
+
+
+/* =========================================================
+   EXECUTION LOGS
+   ========================================================= */
 
 /**
  * Mengambil execution logs.
  */
+
 app.get(
     "/api/logs",
     async (req, res) => {
+
         try {
+
             const statusParam =
                 req.query.status;
+
 
             let status:
                 | "SUCCESS"
                 | "FAILED"
                 | undefined;
 
+
             if (
-                statusParam ===
-                    "SUCCESS" ||
-                statusParam ===
-                    "FAILED"
+                statusParam === "SUCCESS" ||
+                statusParam === "FAILED"
             ) {
+
                 status =
                     statusParam;
             }
+
 
             const logs =
                 await getExecutionLogs(
                     status
                 );
 
+
             res.json({
                 success: true,
                 data: logs,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal mengambil execution logs:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal mengambil execution logs",
             });
+
         }
+
     }
 );
+
 
 /**
  * Mengambil execution log berdasarkan ID.
  */
+
 app.get(
     "/api/logs/:id",
     async (req, res) => {
+
         try {
+
             const id =
                 Number(req.params.id);
+
 
             if (
                 !Number.isInteger(id) ||
                 id <= 0
             ) {
+
                 res.status(400).json({
                     success: false,
                     message:
@@ -591,12 +758,15 @@ app.get(
                 return;
             }
 
+
             const log =
                 await getExecutionLogById(
                     id
                 );
 
+
             if (!log) {
+
                 res.status(404).json({
                     success: false,
                     message:
@@ -606,29 +776,46 @@ app.get(
                 return;
             }
 
+
             res.json({
                 success: true,
                 data: log,
             });
+
         } catch (error) {
+
             console.error(
                 "Gagal mengambil execution log:",
                 error
             );
+
 
             res.status(500).json({
                 success: false,
                 message:
                     "Gagal mengambil execution log",
             });
+
         }
+
     }
 );
 
+
+/* =========================================================
+   START SERVER
+   ========================================================= */
+
 app.listen(PORT, () => {
+
     console.log(
         `AVEZ API berjalan di http://localhost:${PORT}`
     );
 
+    console.log(
+        `AVEZ Log Viewer: http://localhost:${PORT}/logs`
+    );
+
     startScheduler();
+
 });

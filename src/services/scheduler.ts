@@ -1,6 +1,7 @@
 import {
     getSchedules,
     updateNextRunAt,
+    setScheduleActive,
 } from "./scheduleService.js";
 
 import {
@@ -18,6 +19,22 @@ let schedulerTimer:
 
 let isRunning = false;
 
+/**
+ * Menghitung jadwal eksekusi berikutnya.
+ *
+ * DAILY:
+ *   scheduleValue = "08:00"
+ *
+ * WEEKLY:
+ *   scheduleValue = "1 08:00"
+ *   0 = Minggu
+ *   1 = Senin
+ *   ...
+ *   6 = Sabtu
+ *
+ * ONCE:
+ *   Tidak mempunyai jadwal berikutnya.
+ */
 function calculateNextRun(
     schedule: Schedule,
     fromDate: Date
@@ -54,6 +71,10 @@ function calculateNextRun(
                 0
             );
 
+            /*
+             * Jika waktu hari ini sudah lewat,
+             * jadwalkan untuk besok.
+             */
             if (nextRun <= fromDate) {
                 nextRun.setDate(
                     nextRun.getDate() + 1
@@ -64,8 +85,19 @@ function calculateNextRun(
         }
 
         case "WEEKLY": {
-            const [dayString, timeString] =
-                schedule.scheduleValue.split(" ");
+            const parts =
+                schedule.scheduleValue.trim().split(/\s+/);
+
+            if (parts.length !== 2) {
+                throw new Error(
+                    `Format waktu WEEKLY tidak valid untuk schedule ${schedule.id}. Gunakan "day HH:mm".`
+                );
+            }
+
+            const [
+                dayString,
+                timeString,
+            ] = parts;
 
             const day =
                 Number(dayString);
@@ -73,7 +105,7 @@ function calculateNextRun(
             const [
                 hours,
                 minutes,
-            ] = (timeString ?? "")
+            ] = timeString
                 .split(":")
                 .map(Number);
 
@@ -106,6 +138,11 @@ function calculateNextRun(
             let daysUntil =
                 day - currentDay;
 
+            /*
+             * Jika hari target sudah lewat,
+             * atau hari sama tetapi jam sudah lewat,
+             * jadwalkan minggu berikutnya.
+             */
             if (
                 daysUntil < 0 ||
                 (
@@ -131,6 +168,13 @@ function calculateNextRun(
     }
 }
 
+/**
+ * Menjalankan satu schedule.
+ *
+ * Setelah execution:
+ * - ONCE → schedule dinonaktifkan.
+ * - DAILY/WEEKLY → nextRunAt dihitung ulang.
+ */
 async function executeSchedule(
     schedule: Schedule
 ): Promise<void> {
@@ -138,12 +182,16 @@ async function executeSchedule(
         `[Scheduler] Menjalankan schedule #${schedule.id} - ${schedule.name}`
     );
 
+    let executionSuccess = false;
+
     try {
         await runDataEngineWithLogging({
             tickers: schedule.tickers,
             budget: schedule.budget,
             triggerType: "SCHEDULER",
         });
+
+        executionSuccess = true;
 
         console.log(
             `[Scheduler] Schedule #${schedule.id} berhasil`
@@ -155,32 +203,100 @@ async function executeSchedule(
         );
     }
 
+    /*
+     * Waktu dasar untuk menghitung jadwal berikutnya.
+     *
+     * Kita menggunakan waktu sekarang setelah execution
+     * selesai supaya nextRunAt tidak kembali ke waktu
+     * yang sudah terlewat.
+     */
     const now = new Date();
 
-    const nextRun =
-        calculateNextRun(
-            schedule,
-            now
+    try {
+        /*
+         * ONCE:
+         *
+         * Schedule hanya boleh berjalan satu kali.
+         * Setelah execution selesai, nonaktifkan schedule.
+         */
+        if (schedule.scheduleType === "ONCE") {
+            await setScheduleActive(
+                schedule.id,
+                false
+            );
+
+            await updateNextRunAt(
+                schedule.id,
+                null
+            );
+
+            console.log(
+                `[Scheduler] Schedule #${schedule.id} selesai dan dinonaktifkan`
+            );
+
+            return;
+        }
+
+        /*
+         * DAILY / WEEKLY:
+         *
+         * Hitung jadwal berikutnya.
+         */
+        const nextRun =
+            calculateNextRun(
+                schedule,
+                now
+            );
+
+        await updateNextRunAt(
+            schedule.id,
+            nextRun
         );
 
-    await updateNextRunAt(
-        schedule.id,
-        nextRun
-    );
+        if (nextRun) {
+            console.log(
+                `[Scheduler] Schedule #${schedule.id} berikutnya: ${nextRun.toISOString()}`
+            );
+        }
 
-    if (nextRun) {
-        console.log(
-            `[Scheduler] Schedule #${schedule.id} berikutnya: ${nextRun.toISOString()}`
-        );
-    } else {
-        console.log(
-            `[Scheduler] Schedule #${schedule.id} selesai`
+        /*
+         * executionSuccess hanya digunakan untuk
+         * logging/diagnostic di sini.
+         *
+         * Schedule recurring tetap dijadwalkan ulang
+         * meskipun execution sebelumnya gagal.
+         */
+        if (!executionSuccess) {
+            console.log(
+                `[Scheduler] Schedule #${schedule.id} tetap aktif untuk eksekusi berikutnya`
+            );
+        }
+    } catch (error) {
+        /*
+         * Jangan sampai error saat update schedule
+         * membuat scheduler crash secara keseluruhan.
+         */
+        console.error(
+            `[Scheduler] Gagal memperbarui schedule #${schedule.id}:`,
+            error
         );
     }
 }
 
+/**
+ * Melakukan satu kali pengecekan terhadap seluruh
+ * schedule aktif.
+ *
+ * Fungsi ini menggunakan lock sederhana melalui
+ * isRunning agar dua proses checkSchedules()
+ * tidak berjalan bersamaan.
+ */
 async function checkSchedules(): Promise<void> {
     if (isRunning) {
+        console.log(
+            "[Scheduler] Check sebelumnya masih berjalan, skip."
+        );
+
         return;
     }
 
@@ -193,7 +309,29 @@ async function checkSchedules(): Promise<void> {
         const now = new Date();
 
         for (const schedule of schedules) {
+            /*
+             * Jika schedule belum mempunyai nextRunAt,
+             * tentukan jadwal berikutnya terlebih dahulu.
+             */
             if (!schedule.nextRunAt) {
+                /*
+                 * ONCE tanpa nextRunAt tidak mempunyai
+                 * waktu eksekusi yang bisa digunakan.
+                 *
+                 * Kita skip agar tidak terjadi eksekusi
+                 * yang tidak terduga.
+                 */
+                if (
+                    schedule.scheduleType ===
+                    "ONCE"
+                ) {
+                    console.warn(
+                        `[Scheduler] Schedule ONCE #${schedule.id} tidak memiliki nextRunAt, dilewati.`
+                    );
+
+                    continue;
+                }
+
                 const nextRun =
                     calculateNextRun(
                         schedule,
@@ -205,16 +343,28 @@ async function checkSchedules(): Promise<void> {
                     nextRun
                 );
 
+                console.log(
+                    `[Scheduler] Schedule #${schedule.id} memiliki nextRunAt baru: ${nextRun?.toISOString()}`
+                );
+
                 continue;
             }
 
+            /*
+             * Schedule belum waktunya.
+             */
             if (
-                schedule.nextRunAt <= now
+                schedule.nextRunAt > now
             ) {
-                await executeSchedule(
-                    schedule
-                );
+                continue;
             }
+
+            /*
+             * Schedule sudah waktunya.
+             */
+            await executeSchedule(
+                schedule
+            );
         }
     } catch (error) {
         console.error(
@@ -228,12 +378,23 @@ async function checkSchedules(): Promise<void> {
 
 /**
  * Menjalankan satu kali pengecekan scheduler.
- * Digunakan untuk testing atau trigger manual.
+ *
+ * Digunakan untuk:
+ * - testing
+ * - manual trigger
+ * - debugging
  */
 export async function runSchedulerCheck(): Promise<void> {
     await checkSchedules();
 }
 
+/**
+ * Memulai scheduler.
+ *
+ * Scheduler melakukan:
+ * 1. Immediate check.
+ * 2. Check setiap 30 detik.
+ */
 export function startScheduler(): void {
     if (schedulerTimer) {
         console.log(
@@ -247,8 +408,15 @@ export function startScheduler(): void {
         "[Scheduler] Scheduler dimulai"
     );
 
+    /*
+     * Langsung lakukan pengecekan pertama
+     * ketika server mulai.
+     */
     void checkSchedules();
 
+    /*
+     * Setelah itu cek setiap 30 detik.
+     */
     schedulerTimer = setInterval(
         () => {
             void checkSchedules();
@@ -257,12 +425,17 @@ export function startScheduler(): void {
     );
 }
 
+/**
+ * Menghentikan scheduler.
+ */
 export function stopScheduler(): void {
     if (!schedulerTimer) {
         return;
     }
 
-    clearInterval(schedulerTimer);
+    clearInterval(
+        schedulerTimer
+    );
 
     schedulerTimer = null;
 

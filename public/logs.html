@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AVEZ - Execution Logs</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            padding: 24px 32px;
+        }
+
+        header h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        header p {
+            margin: 0;
+            color: #d1d5db;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 32px auto;
+            padding: 0 20px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 12px;
+        }
+
+        .toolbar h2 {
+            margin: 0;
+        }
+
+        button {
+            border: none;
+            background: #2563eb;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow-x: auto;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-size: 14px;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 700px) {
+            header {
+                padding: 20px;
+            }
+
+            main {
+                margin-top: 20px;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>🤖 AVEZ</h1>
+    <p>Automation Execution Log Viewer</p>
+</header>
+
+<main>
+
+    <div class="toolbar">
+        <h2>Execution Logs</h2>
+
+        <button onclick="loadLogs()">
+            🔄 Refresh
+        </button>
+    </div>
+
+    <div id="error"></div>
+
+    <div class="table-container">
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Executed At</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+
+            <tbody id="logsTable">
+                <tr>
+                    <td colspan="6" class="empty">
+                        Loading logs...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+
+</main>
+
+<script>
+
+async function loadLogs() {
+
+    const table = document.getElementById("logsTable");
+    const error = document.getElementById("error");
+
+    error.innerHTML = "";
+
+    table.innerHTML = `
+        <tr>
+            <td colspan="6" class="empty">
+                Loading logs...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const response = await fetch("/api/logs");
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.message || "Gagal mengambil execution logs"
+            );
+        }
+
+        const logs = result.data;
+
+        if (!logs || logs.length === 0) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="6" class="empty">
+                        Belum ada execution log.
+                    </td>
+                </tr>
+            `;
+
+            return;
+        }
+
+        table.innerHTML = logs.map(log => {
+
+            const statusClass =
+                log.status === "SUCCESS"
+                    ? "success"
+                    : "failed";
+
+            const duration =
+                log.durationMs !== null
+                    ? `${(log.durationMs / 1000).toFixed(2)} s`
+                    : "-";
+
+            const executedAt =
+                new Date(log.executedAt).toLocaleString("id-ID");
+
+            return `
+                <tr>
+                    <td>${log.id}</td>
+
+                    <td>${log.triggerType}</td>
+
+                    <td>
+                        <span class="status ${statusClass}">
+                            ${log.status}
+                        </span>
+                    </td>
+
+                    <td>${duration}</td>
+
+                    <td>${executedAt}</td>
+
+                    <td>${log.message || "-"}</td>
+                </tr>
+            `;
+
+        }).join("");
+
+    } catch (err) {
+
+        console.error(err);
+
+        error.innerHTML = `
+            <div class="error">
+                ❌ ${
+                    err instanceof Error
+                        ? err.message
+                        : "Gagal mengambil data log"
+                }
+            </div>
+        `;
+
+        table.innerHTML = "";
+    }
+}
+
+loadLogs();
+
+</script>
+
+</body>
+</html>
