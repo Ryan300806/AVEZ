@@ -6,6 +6,14 @@ import {
     saveExecutionLog,
 } from "./executionLogger.js";
 
+import {
+    buildTelegramMessage,
+} from "./notificationService.js";
+
+import {
+    sendTelegramMessage,
+} from "./telegramService.js";
+
 import type {
     DataEngineResult,
 } from "./dataEngine.js";
@@ -22,6 +30,10 @@ export async function runDataEngineWithLogging(
     const startedAt = Date.now();
 
     try {
+        // ========================================
+        // 1. RUN DATA ENGINE
+        // ========================================
+
         const result = await runDataEngine(
             input.tickers,
             input.budget
@@ -29,6 +41,10 @@ export async function runDataEngineWithLogging(
 
         const durationMs =
             Date.now() - startedAt;
+
+        // ========================================
+        // 2. SAVE EXECUTION LOG
+        // ========================================
 
         await saveExecutionLog({
             triggerType:
@@ -54,7 +70,38 @@ export async function runDataEngineWithLogging(
             },
         });
 
+        // ========================================
+        // 3. BUILD TELEGRAM MESSAGE
+        // ========================================
+
+        const telegramMessage =
+            buildTelegramMessage(result);
+
+        // ========================================
+        // 4. SEND TELEGRAM NOTIFICATION
+        // ========================================
+
+        try {
+            await sendTelegramMessage(
+                telegramMessage
+            );
+
+            console.log(
+                "[Notification] Telegram berhasil dikirim"
+            );
+        } catch (notificationError) {
+            console.error(
+                "[Notification] Gagal mengirim Telegram:",
+                notificationError
+            );
+        }
+
+        // ========================================
+        // 5. RETURN RESULT
+        // ========================================
+
         return result;
+
     } catch (error) {
         const durationMs =
             Date.now() - startedAt;
