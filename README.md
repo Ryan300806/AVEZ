@@ -1,50 +1,40 @@
-# AVEZ — Team Development Guide
+# AVEZ — Automated Investment Allocation & Execution Monitor
 
-## 📌 Repository ini
-Repository utama untuk development AVEZ Hackathon Sector 2026.
+> Automation Engine for Salary-Based Investment Allocation using Sectors Data
 
-## ✅ Yang sudah disiapkan oleh Team Lead / Backend
-- Node.js
-- TypeScript
-- dotenv
-- tsconfig
-- .gitignore
-- .env.example
+AVEZ adalah automation engine yang dirancang untuk melakukan analisis fundamental dan alokasi budget investasi secara otomatis berdasarkan data perusahaan, kemudian mengirimkan hasil analisis melalui Telegram dan mencatat seluruh aktivitas eksekusi ke dalam execution log.
 
-## 🚀 Kalau baru clone repository
-1. git clone ...
-2. cd AVEZ
-3. npm install
-4. buat .env
-5. isi konfigurasi yang diperlukan
+AVEZ **tidak melakukan transaksi jual/beli secara otomatis**. Sistem hanya menghasilkan analisis dan rekomendasi alokasi berdasarkan data fundamental.
 
-## 🔐 Environment
-JANGAN commit .env
-JANGAN memasukkan API Key ke source code
+---
 
-## 🌿 Aturan Git
-Jangan coding langsung di main.
+## 🎯 Hackathon Track
 
-Buat branch:
-git checkout -b feature/nama-fitur
+**Sectors Hackathon 2026 — Track 02: Automation & Workflows**
 
-Setelah selesai:
-git add .
-git commit -m "..."
-git push origin nama-branch
+AVEZ berfokus pada automation workflow yang dapat berjalan tanpa intervensi manual dari trigger hingga notification.
 
-Kemudian buat Pull Request ke main.
+---
 
-## ⚠️ Penting
-Sebelum coding:
-git checkout main
-git pull origin main
+## 🚀 Project Overview
 
-Jangan sembarangan mengubah konfigurasi
-project tanpa koordinasi.
+AVEZ mengotomatisasi proses:
 
-## 📋 Kondisi Repository Saat Ini
-[penjelasan file yang sudah ada]
-
-## 🎯 Next Task
-[task masing-masing anggota]
+```text
+Schedule / API Trigger
+        ↓
+   Sectors API
+        ↓
+    Data Engine
+        ↓
+ Fundamental Screening
+        ↓
+      Scoring
+        ↓
+     Allocation
+        ↓
+   Execution Log
+        ↓
+ Telegram Notification
+        ↓
+    Web Log Viewer
